@@ -15,7 +15,7 @@ Most data is sourced directly from Spokane County. We're fortunate that the coun
 
 A number of ongoing projects will be hosted in this Github repo. Some of these include the following:
 
-1. [Parcel taxpayer analysis](/parcel_taxpayers/README.md)
+1. [Parcel taxpayer analysis](/parcel_taxpayers/)
 1. Home sale price predictive modelling
 1. Recent home sale dashboards
 1. Crime and location, home value, etc. relationship visualization
