@@ -445,8 +445,8 @@ head(wa_city_percentage)
 
 ## Summary
 
-We can summarize the data above with one statement: For the most part, taxpayers with local addresses own local parcels. Here are the other high points:
+We can summarize the data above with one statement: For the most part, taxpayers owning parcels in Spokane County have local addresses. We can assume most parcel owners are locals based on those addresses. Here are the other high-level points:
 
-1. Almost all Spokane County parcels are owned by USA-addressed taxpayers (`r country_percentage$percentage[which(country_percentage$country == "USA")]`%)
-1. `r round(state_percentage$percentage[which(state_percentage$state == "WA")], 2)`% of USA-addressed taxpayers have Washington state addresses. Next is California at `r round(state_percentage$percentage[which(state_percentage$state == "CA")], 2)`%.
+1. Almost all Spokane County parcels are owned by USA-addressed taxpayers (`r round(country_percentage$percentage[which(country_percentage$country == "USA")], 2)`%)
+1. `r round(state_percentage$percentage[which(state_percentage$state == "WA")], 2)`% of USA-addressed taxpayers have Washington state addresses. Next is California at `r round(state_percentage$percentage[which(state_percentage$state == "CA")], 2)`%, and it's downhill from there.
 1. Within WA state, most taxpayers who own parcels in Spokane County have addresses in Spokane (`r round(wa_city_percentage$percentage[which(wa_city_percentage$city == "Spokane")], 2)`%), Spokane Valley (`r round(wa_city_percentage$percentage[which(wa_city_percentage$city == "Spokane Valley")], 2)`%), or Cheney (`r round(wa_city_percentage$percentage[which(wa_city_percentage$city == "Cheney")], 2)`%)
