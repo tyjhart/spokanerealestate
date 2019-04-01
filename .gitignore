@@ -4,6 +4,10 @@
 # Rendered HTML files
 *.html
 
+# Any CSV, XLSX files
+*.csv
+*.xlsx
+
 # History files
 .Rhistory
 .Rapp.history
