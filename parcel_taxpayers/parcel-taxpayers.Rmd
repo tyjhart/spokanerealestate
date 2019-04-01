@@ -3,8 +3,8 @@ title: "Parcel Taxpayers"
 author: "Tyler Hart"
 date: "March 31, 2019"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE, echo = FALSE, warning = FALSE, message = FALSE}
@@ -18,9 +18,7 @@ library(maps)
 library(maptools)
 ```
 
-## Introduction
-
-Spokane county makes [data available about who the taxpayer is for a given parcel of land](https://gisdatacatalog-spokanecounty.opendata.arcgis.com/pages/treasurer-data) and what their address is. For those who might not be aware, Spokane County encompasses the following cities and towns:
+Spokane county makes [data available about who the taxpayer is for a given parcel of land](https://gisdatacatalog-spokanecounty.opendata.arcgis.com/pages/treasurer-data) and what their address is. It's presented in an Excel-formatted file as "taxpayer_info.xlsx". For those who might not be aware, Spokane County encompasses the following cities and towns:
 
 * Airway Heights 
 * Cheney 
@@ -41,7 +39,7 @@ The parcel data includes much more than just land in the city of Spokane. While 
 options("stringsAsFactors" = FALSE)
 ```
 
-Next, we'll import data from [the provided CSV file](https://gisdatacatalog-spokanecounty.opendata.arcgis.com/pages/treasurer-data):
+First, we should open the Excel file and do a "Save As" into CSV format. While R can do file format conversions via the Rio package, I find it easier to do the conversion manually for one-off analysis. Next, we'll import data from [the provided CSV file](https://gisdatacatalog-spokanecounty.opendata.arcgis.com/pages/treasurer-data):
 
 ```{r data_import}
 taxpayer_info <- read_csv(
@@ -304,16 +302,16 @@ wa_taxpayers <- usa_state_taxpayers %>% filter(state == "WA")
 head(wa_taxpayers)
 ```
 
-The data is complete across all the columns, but I noticed while glancing at the rows in data viewer that there are some spelling and data entry errors. In some cases there are many different ways the same data, like "spokane", was entered. Here are all the right (and wrong) spellings of "spokane" in the data:
+The data is complete across all the columns, but I noticed while glancing at the rows in data viewer that there are some spelling and data entry errors. In some cases there are many different ways the same data, like "spokane", was entered. Here are all the right (and wrong) spellings of "SPOKANE" in the data:
 
 ```{r city_taxpayer_table}
-unique(wa_taxpayers$city[which(wa_taxpayers$city %like% "spokane")])
+unique(wa_taxpayers$city[which(wa_taxpayers$city %like% "SPOKANE")])
 ```
 
-"Nine Mile Falls" ends up looking like this in the data:
+"NINE MILE FALLS" ends up looking like this in the data:
 
 ```{r nine_mile_falls_spellings}
-unique(wa_taxpayers$city[which(wa_taxpayers$city %like% "nine")])
+unique(wa_taxpayers$city[which(wa_taxpayers$city %like% "NINE")])
 ```
 
 There is a bit of work to be done on the names before we can Washington data properly. First, we'll convert all city names to lowercase for easier comparison. Then, we'll correct spellings. Fortunately much of this work can be automated if we provide a list of correct spellings:
@@ -384,7 +382,7 @@ With city names being corrected we can capitalize the names properly and create 
 
 ```{r fixed_city_names}
 wa_taxpayers$city <- tools::toTitleCase(as.character(wa_taxpayers$city)) # Fix name case
-wa_taxpayers$city <- as.factor(wa_taxpayers$city) # Re-create factor levels
+wa_taxpayers$city <- as.factor(wa_taxpayers$city) # Create factor levels
 ```
 
 The automated fixes aren't perfect, but we only have a few city names that weren't corrected because their spellings or formatting are really out-of-whack. Now we can graph the amount of parcels in the Spokane County data with taxpayer addresses in Washington. In this case we'll only show the top 25 cities in WA listed as parcel taxpayer addresses:
@@ -405,4 +403,50 @@ wa_state_taxpayers_perc %>% ggplot(aes(reorder(city, -perc), perc)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.25))
 ```
 
-So many parcels have Spokane-addressed taxpayers that we need to use a different scale (Sqrt) for the Y-axis to draw up the other cities for comparison. Taxpayers with Spokane addresses have the lion's share of parcels in Spokane county, following by Spokane Valley  and Cheney addresses. The numbers diminish in cities further aware from Spokane.
+So many parcels have Spokane-addressed taxpayers that we need to use a different scale (Sqrt) for the Y-axis to draw up the other cities for comparison. Taxpayers with Spokane addresses have the lion's share of parcels in Spokane county, following by Spokane Valley and Cheney addresses. The numbers diminish in cities further aware from Spokane.
+
+## Percentages
+
+Most people will want to know overall percentages, so we'll break those down by country, state, and then city. First, the breakdown by country:
+
+```{r country_percentages}
+country_percentage <- taxpayer_info %>%
+  group_by(country) %>%
+  summarise(n = n()) %>%
+  mutate("percentage" = round((n / sum(n)) * 100, 6)) %>%
+  arrange(desc(percentage))
+
+head(country_percentage)
+```
+
+Now, the breakdown by state:
+
+```{r state_percentages}
+state_percentage <- usa_state_taxpayers %>%
+  group_by(state) %>%
+  summarise(n = n()) %>%
+  mutate("percentage" = round((n / sum(n)) * 100, 6)) %>%
+  arrange(desc(percentage))
+
+head(state_percentage)
+```
+
+Finally, the breakdown by city within Washington state:
+
+```{r wa_city_percentages}
+wa_city_percentage <- wa_taxpayers %>%
+  group_by(city) %>%
+  summarise(n = n()) %>%
+  mutate("percentage" = round((n / sum(n)) * 100, 6)) %>%
+  arrange(desc(percentage))
+
+head(wa_city_percentage)
+```
+
+## Summary
+
+We can summarize the data above with one statement: For the most part, taxpayers with local addresses own local parcels. Here are the other high points:
+
+1. Almost all Spokane County parcels are owned by USA-addressed taxpayers (`r country_percentage$percentage[which(country_percentage$country == "USA")]`%)
+1. `r round(state_percentage$percentage[which(state_percentage$state == "WA")], 2)`% of USA-addressed taxpayers have Washington state addresses. Next is California at `r round(state_percentage$percentage[which(state_percentage$state == "CA")], 2)`%.
+1. Within WA state, most taxpayers who own parcels in Spokane County have addresses in Spokane (`r round(wa_city_percentage$percentage[which(wa_city_percentage$city == "Spokane")], 2)`%), Spokane Valley (`r round(wa_city_percentage$percentage[which(wa_city_percentage$city == "Spokane Valley")], 2)`%), or Cheney (`r round(wa_city_percentage$percentage[which(wa_city_percentage$city == "Cheney")], 2)`%)
