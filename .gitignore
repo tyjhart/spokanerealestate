@@ -1,6 +1,9 @@
 # Data files (can be large)
 /data/
 
+# Rendered HTML files
+*.html
+
 # History files
 .Rhistory
 .Rapp.history
