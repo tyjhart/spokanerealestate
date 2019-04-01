@@ -1,0 +1,435 @@
+---
+title: "Parcel Taxpayers"
+author: "Tyler Hart"
+date: "March 31, 2019"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE, echo = FALSE, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(tidyverse)
+library(scales)
+library(data.table)
+library(stringdist)
+library(maps)
+library(maptools)
+```
+
+## Introduction
+
+Discussion continues online about real estate and rental markets in Spokane. We're experiencing historically-low vacancy rates for rentals and a fast-paced sales market driven by demand that isn't satisfied by available inventory. Both have caused rents to rise and sale prices to inflate in the greater Spokane area. Speculation around the cause of low vacancy rates and rising prices tends to center around a few theories:
+
+1. Zoning laws prohibit new construction that would satisfy demand
+1. Existing residents are resistant to development in their neighborhood
+1. An influx of buyers from more expensive markets (CA, east coast, etc.) willing to pay more are pulling the market upward
+1. Investors from outside the area buying up properties for investment / rentals are reducing inventory for local residents looking to buy
+
+Issues with zoning have been explored by local journalists and researchers. Anecdotal evidence of residents resistant to change has been featured in articles by the Inlander and Spokesman Review. These are difficult to quantify and visualize, and I don't want to turn this small project into an opinion piece. 
+
+Spokane county makes [data available about who the taxpayer is for a given parcel of land](https://gisdatacatalog-spokanecounty.opendata.arcgis.com/pages/treasurer-data) and what their address is. For those who might not be aware, Spokane County encompasses the following cities and towns:
+
+* Airway Heights 
+* Cheney 
+* Deer Park
+* Fairfield
+* Latah 
+* Liberty Lake 
+* Medical Lake 
+* Millwood 
+* Rockford
+* Spangle 
+* Spokane Valley
+* Waverly
+
+The parcel data includes much more than just land in the city of Spokane. While most of the data is complete and usable, some of it is not. Since the data isn't yet complete, we'll set the *stringsAsFactors* option to *FALSE* before importing:
+
+```{r factors_option}
+options("stringsAsFactors" = FALSE)
+```
+
+Next, we'll import data from [the provided CSV file](https://gisdatacatalog-spokanecounty.opendata.arcgis.com/pages/treasurer-data):
+
+```{r data_import}
+taxpayer_info <- read_csv(
+  "taxpayer_info.csv",
+  col_types = cols(
+    parcel = col_character(),
+    taxpayer = col_character(),
+    address_1 = col_character(),
+    address_2 = col_character(),
+    city = col_character(),
+    state = col_character(),
+    zip = col_character(),
+    country = col_character(),
+    role_percentage = col_double(),
+    in_care_of = col_character()
+    )
+  )
+```
+
+The raw data provided by Spokane County looks like this:
+
+```{r data_intro}
+head(taxpayer_info)
+```
+
+We can leverage this publicly-available data and focus on the last theory, that people from outside the area are buying up property. We'll visualize the relationship between local and out-of-state taxpayers using county records.
+
+## Assumptions & Challenges
+
+The assumption that an out-of-state taxpayer address means the owner is from elsewhere won't always be true. Trusts, investment corporations, and other entities that own parcels have registered addresses that may or may not reflect locations of people behind the organization. For example, a popular option for incorporating is to register a business in Deleware, given that state's favorable tax environment and unique legal structures. Residents of Spokane could easily incorporate a Deleware LLC and purchase properties as that organization. Spokane's taxpayer records would show a parcel's taxes being paid from a Deleware address, even though the actual owner is local. 
+
+My family's situation is unique as well; We purchased property in Spokane and used it initially as our primary residence. Then I got a good job offer from a company in Virginia and we relocated to the east coast. Now in Spokane's recent tax records I am an out-of-state owner, even though I was originally a local buyer. It's also difficult to determine if the reverse has happened. Buyers (taxpayers) from out-of-state who move to the area aren't recorded as such when purchasing a home for their primary residence; Spokane county's downloadable data doesn't include information about the purchaser's residency. 
+
+We also can't account for "snowbirds" who may have moved their primary residence out-of-area, but occupy local homes part-time. These people were originally local buyers, and should be accounted for as-such, but we have no way to know who that situation applies to. There is certainly a cadre of snowbirds in the local area, but estimating their size with any amount of accuracy is not feasible with the data at-hand.
+
+Despite these challenges I think the taxpayer data is interesting, and we shouldn't "sacrifice the good for the perfect" when it comes to exploratory data analysis (EDA). There are over 300,000 rows of data on Spokane County parcel taxpayers. Given that amount of data and the number of unique taxpayers listed in the county, I'm comfortable drawing some basic conclusions about parcel ownership.
+
+## Data Restrictions
+
+There is something important to note about the data - while it is freely-available, Washington state law forbids lists of people derived from this data being used for commercial reasons:
+
+>RCW 42.56.070(9) prohibits the release of lists of individuals requested for commercial purposes. The requester expressly represents that no such use of any such list will be made by the user or its transferee(s) or vendee(s).
+
+During analysis I won't be referrencing the names of individuals at all. We only care about their location (country, state, city) and parcel number for the purposes of this project.
+
+## Wrangling
+
+We'll go through a number of steps to wrangle the data, mostly filling in missing fields and fixing spelling. We didn't want the parcel or address character-type columns to be imported automatically as factors, hence the option setting *stringsAsFactors* to *FALSE*. Later we'll convert some of the columns like *city* and *state* to factors for easier analysis, but only after cleaning up the data.
+
+Not all rows have a country specified, even though their address is clearly in the United States. Here are some examples of WA addresses not being in the USA:
+
+```{r missing_countries}
+head(taxpayer_info %>% 
+       filter(state == "WA" & is.na(country)) %>% 
+       select(parcel, taxpayer, state, country))
+```
+
+We can safely assume that an address in WA state - or any other American state - is in the USA. Other state designations used for military mail like "AA", "AE", and "AP" should also be considered in the USA. Territories like Puerto Rico ("PR") and Guam ("GM") are also in the United States for our purposes, even if they aren't part of the continental United States or officially given full statehood. The District of Columbia ("DC") is obviously in the United States as well. We'll fill in "USA" country values for more complete data:
+
+```{r }
+# Offical states
+taxpayer_info$country <- ifelse(
+  taxpayer_info$state %in% state.abb, 
+  "USA", 
+  taxpayer_info$country)
+
+# Territories, military, and DC
+taxpayer_info$country <- ifelse(
+  taxpayer_info$state %in% c("AA", "AE", "AP", "DC", "PR", "GM"), 
+  "USA", 
+  taxpayer_info$country)
+```
+
+Here's the new data with filled-in country column:
+
+```{r filled_in_country}
+head(taxpayer_info %>% select(parcel, taxpayer, state, country))
+```
+
+That takes care of states in the USA, but not all taxpayers have American addresses. Unfortunately, not all non-USA countries are formatted consistently in the data. The [ISO 3166 standard](https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes) sets out standardized two and three-letter abbreviations for countries, and is the preferred way of storing location information. Data from Spokane County sometimes has country abbreviations with two letters, while other countries like Canada are entered as "CANDA". Australia is abbreviated as "AUSTR" in the data, which could be confused with "Austria". We need to fix non-USA country names so they are usable as factors and for visualizations. We'll do selective replacements using abbreviations within the data and their respective country names:
+
+```{r fix_country_name}
+country_names <- data.frame(
+  "country" = c(
+    "CANDA", 
+    "AUSTR", 
+    "HK", 
+    "DEN", 
+    "FIN", 
+    "GERMY", 
+    "JAPAN",
+    "MEXCO", 
+    "PHILI", 
+    "SAUDI",
+    "USA",
+    "SWLAN",
+    "ROC"
+    ),
+  "fixed_country" = c(
+    "Canada", 
+    "Australia", 
+    "Hong Kong", 
+    "Denmark", 
+    "Finland", 
+    "Germany", 
+    "Japan",
+    "Mexico", 
+    "Phillipines", 
+    "Saudi Arabia",
+    "USA",
+    "Switzerland",
+    "Republic of China"
+    )
+)
+
+taxpayer_info <- left_join(taxpayer_info, country_names, by = "country")
+taxpayer_info$country <- taxpayer_info$fixed_country # Replace old data with new
+taxpayer_info$fixed_country <- NULL # Clean up
+```
+
+Unlike rows that we just fixed with missing countries, dozens of rows assigned "Spokane" *city*, "99XYZ" *zip*, and "USA" *country* are missing *state* ("WA") data. We'll update these rows with "WA" values for *state*:
+
+```{r missing_wa_state}
+taxpayer_info$state[which(taxpayer_info$city == "SPOKANE" & taxpayer_info$country == "USA" & substr(taxpayer_info$zip, 1, 2) == "99")] <- "WA"
+```
+
+Almost a dozen other rows have their city set to "Chicago, IL" but no state data - they are obviously in Illinois so we can fix them too:
+
+```{r missing_il_state}
+taxpayer_info$state[which(taxpayer_info$city == "CHICAGO, IL")] <- "IL"
+```
+
+A number of other rows have "city, STATE" data for Washington locations in the *city* column but no state. For example, there are a few rows with "Spokane, WA" for *city* and "NA" values for *state.* We'll assign "WA" for *state*, then strike the ", WA" characters from *city*. We'll also do the same for ", IL" data that we already fixed:
+
+```{r wa_city_state_error}
+taxpayer_info$state[which(str_sub(taxpayer_info$city, start = -4) == ", WA")] <- "WA"
+
+for (state_str in c(", IL", ", WA")) {
+  taxpayer_info$city <- gsub(state_str, "", taxpayer_info$city)
+}
+```
+
+Now that city, state, and country names are squared-up, we'll remove columns that aren't useful for analysis. For example, the taxpayer's name isn't necessary for analyzing data by country or state. A parcel's street number and name aren't needed either. Most parcels have no data in the second address line field, so we'll drop that as well. The *roll_percentage* field could express multiple levels of ownership, but all `r length(taxpayer_info$parcel)` rows have a value of "100", so we'll drop it too:
+
+```{r drop_columns}
+taxpayer_info$taxpayer <- NULL # Names
+taxpayer_info$address_1 <- NULL # Street address
+taxpayer_info$address_2 <- NULL # Unit number
+taxpayer_info$in_care_of <- NULL # Notes
+taxpayer_info$role_percentage <- NULL # Ownership percentage?
+```
+
+About a half-dozen rows out of hundreds-of-thousands don't have city, state, or country filled in. Rather than guessing we'll just filter out any remaining rows that don't have a country assigned:
+
+```{r drop_nas}
+taxpayer_info <- taxpayer_info %>% filter(!is.na(country))
+```
+
+Some rows remain that are missing state or zip code information, but that shouldn't affect our analysis in a material way. This leaves us with a total `r length(taxpayer_info$parcel)` rows of data to analyze. Finally, we'll set the *country* column as a factor for easier analysis:
+
+```{r factor_columns}
+taxpayer_info$country <- factor(taxpayer_info$country, levels = country_names$fixed_country)
+```
+
+Let's look at a table of parcel counts broken up by country:
+
+```{r tables}
+sort(table(taxpayer_info$country), decreasing = TRUE)
+```
+
+It looks like the vast majority of parcels are owned by taxpayers (people or organizations) with addresses in the United States. The next largest number of parcels is owned by taxpayers with addresses in Canada. Here's the count of Canadian taxpayer addresses:
+
+```{r canada_parcel_total}
+sum(taxpayer_info$country == "Canada")
+```
+
+Canadian taxpayers seem to own more parcels than all of the other non-USA countries combined - but is that a lot? Here's the overall *percentage* of parcels with Canadian taxpayers:
+
+```{r canada_parcel_prop}
+(sum(taxpayer_info$country == "Canada") / length(taxpayer_info$country)) * 100
+```
+
+Needless to say, less than half of one percent isn't a lot. The ownership percentage of parcels by taxpayers with addresses in other countries besides Canada are so small they aren't worth mentioning. Here's a graph:
+
+```{r country_graph}
+taxpayer_info %>% count(country) %>% mutate("perc" = (n / nrow(taxpayer_info)) * 100) -> country_percs
+country_percs %>% ggplot(aes(reorder(country, -perc), perc)) + 
+  geom_bar(stat = "identity") + 
+  scale_y_sqrt() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.25)) +
+  xlab("Taxpayer Addres Country") +
+  ylab("Parcel % (Sqrt Scale)")
+```
+
+Non-USA numbers are so small that the Y-axis scale had to be switch to square root (sqrt) to make the data visible. Let's move on to more interesting analysis - how is parcel ownership distributed within the United States? First we'll filter all parcels with *country* "USA". Then we'll create a table with state abbreviations and lowercase names, and join it to the real data. Those lower-case proper names will be used later to draw a map. Finally, we'll set *state* as a factor and take a quick peek at the data:
+
+```{r usa_taxpayers}
+usa_state_taxpayers <- taxpayer_info %>% filter(country == "USA") %>% na.omit()
+
+# State abbrev, names
+state_table <- data.frame(
+  "state" = state.abb,
+  "state_name" = str_to_lower(state.name)
+)
+
+# Add proper state names
+usa_state_taxpayers <- left_join(usa_state_taxpayers, state_table, by = "state")
+
+# Factor states
+usa_state_taxpayers$state <- as.factor(usa_state_taxpayers$state)
+head(usa_state_taxpayers)
+```
+
+With each state (and territory) being a factor in R we can easily see how many parcels there are for taxpayers in each state:
+
+```{r state_taxpayer_table}
+table(usa_state_taxpayers$state)
+```
+
+Note that there is one parcel listed under the state BC. Unfortunately in the data entry process for the original CSV there appears to be an error with one row having a Canadian address marked with "USA" for the country. We'll look at the same type of bar chart as we did for countries already, but this time for US states:
+
+```{r state_chart}
+# Count, percentage by state
+usa_state_taxpayers_perc <- usa_state_taxpayers %>% 
+  count(state) %>% 
+  mutate("perc" = (n / nrow(usa_state_taxpayers)) * 100)
+
+# Add proper names for easier mapping later
+usa_state_taxpayers_perc <- left_join(usa_state_taxpayers_perc, state_table, by = "state")
+
+# Plot parcel taxpayers by state, percentages greather than 0.25%
+usa_state_taxpayers_perc %>% 
+  filter(perc > 0.25) %>%
+  ggplot(aes(reorder(state, -perc), perc)) + 
+  geom_bar(stat = "identity") +
+  scale_y_sqrt() +
+  xlab("Taxpayer Address State") +
+  ylab("Percentage Parcels (Sqrt Scale)") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.25))
+```
+
+We can build a map of parcel taxpayer states as well:
+
+```{r state_map_plot}
+state_map <- map_data("state")
+
+usa_state_taxpayers_perc %>% 
+  ggplot() +
+  geom_map(data = state_map, 
+         map = state_map,
+         aes(
+           long, 
+           lat, 
+           map_id = region
+           ),
+         fill="#ffffff", color="#2b2b2b", size=0.15
+         ) +
+  geom_map(data = usa_state_taxpayers_perc,
+           map = state_map,
+           aes(
+             fill = perc,
+             map_id = state_name,
+             color = factor(state_name)
+             ),
+           color="#2b2b2b", size=0.15
+           ) +
+  scale_fill_continuous(name = "Parcel %", type = "gradient", trans = "sqrt") +
+  coord_map("polyconic")
+
+```
+
+By an overwhelming majority it appears that parcels in Spokane County are owned by taxpayers with WA addresses. Total WA taxpayer addresses make up `r round(usa_state_taxpayers_perc$perc[which(usa_state_taxpayers_perc$state == "WA")], 2)`% of parcels. Next in line is California, which may give weight to anecdotal observations about people from California making local property purchases. However, CA only makes up `r round(usa_state_taxpayers_perc$perc[which(usa_state_taxpayers_perc$state == "CA")], 2)`% of parcel taxpayer addresses. All other states have parcel taxpayer percentages so small they are difficult to visualize on a colored map. 
+
+Let's go one level deeper and look at taxpayers within WA state - how many are from Spokane? First, we'll whittle the data down more and filter by taxpayers in Washington state:
+
+```{r wa_taxpayers}
+wa_taxpayers <- usa_state_taxpayers %>% filter(state == "WA")
+head(wa_taxpayers)
+```
+
+The data is complete across all the columns, but I noticed while glancing at the rows in data viewer that there are some spelling and data entry errors. In some cases there are many different ways the same data, like "spokane", was entered. Here are all the right (and wrong) spellings of "spokane" in the data:
+
+```{r city_taxpayer_table}
+unique(wa_taxpayers$city[which(wa_taxpayers$city %like% "spokane")])
+```
+
+"Nine Mile Falls" ends up looking like this in the data:
+
+```{r nine_mile_falls_spellings}
+unique(wa_taxpayers$city[which(wa_taxpayers$city %like% "nine")])
+```
+
+There is a bit of work to be done on the names before we can Washington data properly. First, we'll convert all city names to lowercase for easier comparison. Then, we'll correct spellings. Fortunately much of this work can be automated if we provide a list of correct spellings:
+
+```{r fix_wa_names}
+# Lowercase
+wa_taxpayers$city <- str_to_lower(wa_taxpayers$city, locale = "en")
+
+# City names that were misspelled
+misspelled_cities <- c(
+  "airway heights",
+  "bainbridge island",
+  "bothell",
+  "bellevue",
+  "chattaroy",
+  "chehalis",
+  "cheney",
+  "centralia",
+  "clarkston",
+  "cle elum",
+  "clyde hill",
+  "colbert",
+  "deer park",
+  "east wenatchee",
+  "elk",
+  "fairchild",
+  "fairfield",
+  "friday harbor",
+  "gig harbor",
+  "greenacres",
+  "kirkland",
+  "liberty lake",
+  "marshall",
+  "mead",
+  "medical lake",
+  "metaline",
+  "metaline falls",
+  "mountlake terrace",
+  "nine mile falls",
+  "normandy park",
+  "otis orchards",
+  "port orchard",
+  "rochester",
+  "rolling bay",
+  "rosalia",
+  "spokane",
+  "spokane valley",
+  "sprague",
+  "sumner",
+  "tukwila",
+  "university place",
+  "washougal",
+  "west richland",
+  "woodinville"
+)
+
+# Fix names within 1:3 char of the real name incrementally
+for (iter_count in 1:3) {
+  for (city_name in misspelled_cities) {
+    wa_taxpayers$city[
+      which(stringdist(wa_taxpayers$city, city_name) %in% c(1:iter_count))
+      ] <- city_name
+  }
+}
+```
+
+With city names being corrected we can capitalize the names properly and create factors:
+
+```{r fixed_city_names}
+wa_taxpayers$city <- tools::toTitleCase(as.character(wa_taxpayers$city)) # Fix name case
+wa_taxpayers$city <- as.factor(wa_taxpayers$city) # Re-create factor levels
+```
+
+The automated fixes aren't perfect, but we only have a few city names that weren't corrected because their spellings or formatting are really out-of-whack. Now we can graph the amount of parcels in the Spokane County data with taxpayer addresses in Washington. In this case we'll only show the top 25 cities in WA listed as parcel taxpayer addresses:
+
+```{r wa_taxpayer_cities}
+# Counts, percentages by city
+wa_state_taxpayers_perc <- wa_taxpayers %>% 
+  count(city) %>% 
+  mutate("perc" = (n / nrow(wa_taxpayers)) * 100) %>%
+  top_n(., 25)
+
+# Plot parcel taxpayers by city
+wa_state_taxpayers_perc %>% ggplot(aes(reorder(city, -perc), perc)) + 
+  geom_bar(stat = "identity") +
+  scale_y_sqrt() +
+  xlab("Taxpayer City") +
+  ylab("Percentage Parcels (Sqrt Scale)") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.25))
+```
+
+So many parcels have Spokane-addressed taxpayers that we need to use a different scale (Sqrt) for the Y-axis to draw up the other cities for comparison. Taxpayers with Spokane addresses have the lion's share of parcels in Spokane county, following by Spokane Valley  and Cheney addresses. The numbers diminish in cities further aware from Spokane.
