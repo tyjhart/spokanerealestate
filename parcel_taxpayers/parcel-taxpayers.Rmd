@@ -3,8 +3,9 @@ title: "Parcel Taxpayers"
 author: "Tyler Hart"
 date: "March 31, 2019"
 output:
-  html_document: default
   pdf_document: default
+  word_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE, echo = FALSE, warning = FALSE, message = FALSE}
@@ -145,7 +146,11 @@ taxpayer_info$fixed_country <- NULL # Clean up
 Unlike rows that we just fixed with missing countries, dozens of rows assigned "Spokane" *city*, "99XYZ" *zip*, and "USA" *country* are missing *state* ("WA") data. We'll update these rows with "WA" values for *state*:
 
 ```{r missing_wa_state}
-taxpayer_info$state[which(taxpayer_info$city == "SPOKANE" & taxpayer_info$country == "USA" & substr(taxpayer_info$zip, 1, 2) == "99")] <- "WA"
+taxpayer_info$state[
+  which(
+    taxpayer_info$city == "SPOKANE" & taxpayer_info$country == "USA" & substr(taxpayer_info$zip, 1, 2) == "99"
+    )
+  ] <- "WA"
 ```
 
 Almost a dozen other rows have their city set to "Chicago, IL" but no state data - they are obviously in Illinois so we can fix them too:
@@ -180,7 +185,7 @@ About a half-dozen rows out of hundreds-of-thousands don't have city, state, or 
 taxpayer_info <- taxpayer_info %>% filter(!is.na(country))
 ```
 
-Some rows remain that are missing state or zip code information, but that shouldn't affect our analysis in a material way. This leaves us with a total `r length(taxpayer_info$parcel)` rows of data to analyze. Finally, we'll set the *country* column as a factor for easier analysis:
+Some rows remain that are missing state or zip code information, but that shouldn't affect our analysis in a material way. This leaves us with a total of `r length(taxpayer_info$parcel)` rows to analyze. Finally, we'll set the *country* column as a factor for easier analysis:
 
 ```{r factor_columns}
 taxpayer_info$country <- factor(taxpayer_info$country, levels = country_names$fixed_country)
@@ -207,16 +212,18 @@ Canadian taxpayers seem to own more parcels than all of the other non-USA countr
 Needless to say, less than half of one percent isn't a lot. The ownership percentage of parcels by taxpayers with addresses in other countries besides Canada are so small they aren't worth mentioning. Here's a graph:
 
 ```{r country_graph}
-taxpayer_info %>% count(country) %>% mutate("perc" = (n / nrow(taxpayer_info)) * 100) -> country_percs
+taxpayer_info %>% 
+  count(country) %>% 
+  mutate("perc" = (n / nrow(taxpayer_info)) * 100) -> country_percs
 country_percs %>% ggplot(aes(reorder(country, -perc), perc)) + 
   geom_bar(stat = "identity") + 
   scale_y_sqrt() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.25)) +
-  xlab("Taxpayer Addres Country") +
+  xlab("Taxpayer Address Country") +
   ylab("Parcel % (Sqrt Scale)")
 ```
 
-Non-USA numbers are so small that the Y-axis scale had to be switch to square root (sqrt) to make the data visible. Let's move on to more interesting analysis - how is parcel ownership distributed within the United States? First we'll filter all parcels with *country* "USA". Then we'll create a table with state abbreviations and lowercase names, and join it to the real data. Those lower-case proper names will be used later to draw a map. Finally, we'll set *state* as a factor and take a quick peek at the data:
+Non-USA numbers are so small that the Y-axis scale had to be switched to square root (sqrt) to make the data visible. Let's move on to more interesting analysis - how is parcel ownership distributed within the United States? First we'll filter all parcels with *country* "USA". Then we'll create a table with state abbreviations and lowercase names, and join it to the real data. Those lower-case proper names will be used later to draw a map. Finally, we'll set *state* as a factor and take a quick peek at the data:
 
 ```{r usa_taxpayers}
 usa_state_taxpayers <- taxpayer_info %>% filter(country == "USA") %>% na.omit()
@@ -241,7 +248,7 @@ With each state (and territory) being a factor in R we can easily see how many p
 table(usa_state_taxpayers$state)
 ```
 
-Note that there is one parcel listed under the state BC. Unfortunately in the data entry process for the original CSV there appears to be an error with one row having a Canadian address marked with "USA" for the country. We'll look at the same type of bar chart as we did for countries already, but this time for US states:
+Note that there is one parcel listed under the state BC. Unfortunately in the data entry process for the original CSV there appears to be an error with one row having a Canadian address marked with "USA" for the country. We'll look at the same type of bar chart as we did for countries already, but this time for states in the US:
 
 ```{r state_chart}
 # Count, percentage by state
@@ -252,7 +259,7 @@ usa_state_taxpayers_perc <- usa_state_taxpayers %>%
 # Add proper names for easier mapping later
 usa_state_taxpayers_perc <- left_join(usa_state_taxpayers_perc, state_table, by = "state")
 
-# Plot parcel taxpayers by state, percentages greather than 0.25%
+# Plot parcel taxpayers by state, percentages greater than 0.25%
 usa_state_taxpayers_perc %>% 
   filter(perc > 0.25) %>%
   ggplot(aes(reorder(state, -perc), perc)) + 
@@ -302,7 +309,7 @@ wa_taxpayers <- usa_state_taxpayers %>% filter(state == "WA")
 head(wa_taxpayers)
 ```
 
-The data is complete across all the columns, but I noticed while glancing at the rows in data viewer that there are some spelling and data entry errors. In some cases there are many different ways the same data, like "spokane", was entered. Here are all the right (and wrong) spellings of "SPOKANE" in the data:
+The data is complete across all the columns, but I noticed while glancing at the rows in data viewer that there are some spelling and data entry errors. In some cases there are many different ways the same data, like "Spokane", was entered. Here are all the right (and wrong) spellings of "SPOKANE" in the data:
 
 ```{r city_taxpayer_table}
 unique(wa_taxpayers$city[which(wa_taxpayers$city %like% "SPOKANE")])
@@ -368,7 +375,7 @@ misspelled_cities <- c(
   "woodinville"
 )
 
-# Fix names within 1:3 char of the real name incrementally
+# Fix names within 1:3 char of the real name, incrementally
 for (iter_count in 1:3) {
   for (city_name in misspelled_cities) {
     wa_taxpayers$city[
@@ -385,7 +392,7 @@ wa_taxpayers$city <- tools::toTitleCase(as.character(wa_taxpayers$city)) # Fix n
 wa_taxpayers$city <- as.factor(wa_taxpayers$city) # Create factor levels
 ```
 
-The automated fixes aren't perfect, but we only have a few city names that weren't corrected because their spellings or formatting are really out-of-whack. Now we can graph the amount of parcels in the Spokane County data with taxpayer addresses in Washington. In this case we'll only show the top 25 cities in WA listed as parcel taxpayer addresses:
+The automated fixes aren't perfect, but we only have a few city names that weren't corrected because their spellings or formatting are really out-of-whack. Now we can graph the number of parcels in the Spokane County data with taxpayer addresses in Washington. In this case we'll only show the top 25 cities in WA listed as parcel taxpayer addresses:
 
 ```{r wa_taxpayer_cities}
 # Counts, percentages by city
@@ -407,7 +414,7 @@ So many parcels have Spokane-addressed taxpayers that we need to use a different
 
 ## Percentages
 
-Most people will want to know overall percentages, so we'll break those down by country, state, and then city. First, the breakdown by country:
+Most people will want to know overall percentages, so we'll break those down by country, state, and city. First, the breakdown by country:
 
 ```{r country_percentages}
 country_percentage <- taxpayer_info %>%
