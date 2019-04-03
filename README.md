@@ -19,3 +19,7 @@ A number of ongoing projects will be hosted in this Github repo. Some of these i
 1. Home sale price predictive modelling
 1. Recent home sale dashboards
 1. Crime and location, home value, etc. relationship visualization
+
+## License
+
+My work in this project is licensed under the [Creative Commons Attribution Share Alike 4.0 International license](LICENSE.md). Data available from public sources is licensed independently - please consult data publishers before using the data.
