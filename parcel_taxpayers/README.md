@@ -11,6 +11,15 @@ Issues with zoning have been explored by local journalists and researchers. Anec
 
 What I want to do is analyze who owns parcels of land in Spokane. Do locals own most of the parcels in our county? If so, how much of it do they own? How many parcels are owned by out-of-towners? Has there been investment in real estate from overseas? We'll have a look.
 
+## TL;DR
+
+Here's a summary of what I found in Spokane County's parcel data:
+
+1. There were 338,304 rows of parcel data from Spokane County 
+1. Almost all Spokane County parcels are owned by USA-addressed taxpayers (99.62%)
+1. 88.59% of USA-addressed taxpayers have Washington state addresses. Next is California at 1.45%, and it’s downhill from there.
+1. Within WA state, most taxpayers who own parcels in Spokane County have addresses in Spokane (60.47%), Spokane Valley (7.05%), or Cheney (3.49%)
+
 ## Assumptions & Challenges
 
 The assumption that an out-of-state taxpayer address means the owner is from elsewhere won't always be true. Trusts, investment corporations, and other entities that own parcels have registered addresses that may or may not reflect locations of people behind the organization. For example, a popular option for incorporating is to register a business in Deleware, given that state's favorable tax environment and unique legal structures. Residents of Spokane could easily incorporate a Deleware LLC and purchase properties as that organization. Spokane's taxpayer records would show a parcel's taxes being paid from a Deleware address, even though the actual owner is local. 
